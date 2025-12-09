@@ -23,6 +23,7 @@
 from typing import Optional, Union, Dict
 from pathlib import Path
 import contextlib
+import os
 
 import typer
 import torch
@@ -52,6 +53,21 @@ from py_irt.anchor_utils import create_anchor_gradient_zeroer
 
 training_app = typer.Typer()
 console = Console()
+
+# Gradient clipping configuration
+# --------------------------------
+# Gradient clipping helps prevent NaN parameters during training, which can occur
+# when gradients explode (especially in multidimensional IRT models with many items).
+# 
+# The default value of 10.0 is a common choice in deep learning that balances:
+# - Preventing gradient explosion (values too high won't help)
+# - Not over-constraining learning (values too low slow convergence)
+#
+# You can tune this via environment variable if needed:
+#   PYIRT_CLIP_NORM=5.0 python ...  (more aggressive clipping)
+#   PYIRT_CLIP_NORM=20.0 python ... (less aggressive clipping)
+#
+GRADIENT_CLIP_NORM = float(os.environ.get("PYIRT_CLIP_NORM", "10.0"))
 
 
 class IrtModelTrainer:
@@ -159,12 +175,14 @@ class IrtModelTrainer:
         self._pyro_model = self.irt_model.get_model()
         self._pyro_guide = self.irt_model.get_guide()
         device = torch.device(device)
+        # Use gradient clipping to prevent NaN from gradient explosion
         scheduler = pyro.optim.ExponentialLR(
             {
                 "optimizer": torch.optim.Adam,
                 "optim_args": {"lr": self._config.lr},
                 "gamma": self._config.lr_decay,
-            }
+            },
+            clip_args={"clip_norm": GRADIENT_CLIP_NORM}
         )
         svi = SVI(self._pyro_model, self._pyro_guide, scheduler, loss=Trace_ELBO())
         subjects = torch.tensor(

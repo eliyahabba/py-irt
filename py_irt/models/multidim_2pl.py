@@ -228,6 +228,7 @@ class Multidim2PL(IrtModel):
             mu_theta = pyro.sample(
                 "mu_theta", dist.Normal(loc_mu_theta_param, scale_mu_theta_param)
             )
+        
         with pyro.plate("u_theta_plate", self.dims):
             u_theta = pyro.sample("u_theta", dist.Gamma(alpha_theta_param, beta_theta_param))
 
